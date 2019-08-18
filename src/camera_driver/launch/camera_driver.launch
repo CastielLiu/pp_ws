@@ -1,0 +1,15 @@
+<!-- -->
+
+<launch>
+<arg name="show" default="false" />
+
+	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_node" output="screen">
+		<param name ="calibration_file_path" value="$(find camera_driver)/calibration_file/"/>
+		<param name ="frame_rate" value="30"/>
+		<param name="is_show_image" value="$(arg show)"/>
+		<rosparam param="cameras_id" >[1,2]</rosparam>
+		
+	</node>
+
+</launch>
+
