@@ -52,7 +52,7 @@ public:
 			std::string file_name = calibrationFilePath + std::to_string(i+1) + ".yaml";
 			if(!loadIntrinsics(file_name,m_instrinsics[i],m_distortCoefficients[i]))
 				return false;
-			m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
+			//m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
 		}
 		
 		m_pub = it.advertise("/image_rectified", 1);
@@ -98,7 +98,7 @@ public:
 				rectified_images[i].copyTo(resultImage(
 					Rect(rectified_images[i].cols*(cameraHandles.size()-1-i),0,m_imgSize.width,m_imgSize.height)));
 					
-				imshow(std::to_string(i+1),rectified_images[i]);
+				//imshow(std::to_string(i+1),rectified_images[i]);
 				
 			}
 				namedWindow("resultImage",WINDOW_NORMAL);
