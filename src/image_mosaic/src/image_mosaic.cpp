@@ -74,12 +74,8 @@ void CalcCorners(const Mat& H, const Mat& src)
 
 int main(int argc, char *argv[])
 {
-    Mat image01 = imread("/home/wendao/Desktop/1.jpg", 1);    //右图
-    Mat image02 = imread("/home/wendao/Desktop/2.jpg", 1);    //左图
-    imshow("p2", image01);
-    imshow("p1", image02);
-    cout << "81" << endl;
-    waitKey(0);
+    Mat image01 = imread("/home/wendao/Desktop/5.jpg", 1);    //右图
+    Mat image02 = imread("/home/wendao/Desktop/6.jpg", 1);    //左图
 
     //灰度图转换  
     Mat image1, image2;
@@ -88,11 +84,13 @@ int main(int argc, char *argv[])
 
 
     //提取特征点    
-    SurfFeatureDetector Detector(2000);  
+    auto detector = AKAZE::create(2000);
+    //SurfFeatureDetector Detector(2000);  
     vector<KeyPoint> keyPoint1, keyPoint2;
-    Detector.detect(image1, keyPoint1);
-    Detector.detect(image2, keyPoint2);
+    detector->detect(image1, keyPoint1);
+    detector->detect(image2, keyPoint2);
 
+	
     //特征点描述，为下边的特征点匹配做准备    
     SurfDescriptorExtractor Descriptor;
     Mat imageDesc1, imageDesc2;
