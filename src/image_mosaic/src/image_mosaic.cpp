@@ -6,6 +6,7 @@ using std::vector;
 #include <opencv2/core/core.hpp>
 #include <opencv2/nonfree/nonfree.hpp>
 #include <opencv2/nonfree/features2d.hpp>
+#include<ros/ros.h>
 
 
 #include <iostream>  
@@ -74,23 +75,28 @@ void CalcCorners(const Mat& H, const Mat& src)
 
 int main(int argc, char *argv[])
 {
-    Mat image01 = imread("/home/wendao/Desktop/1.jpg", 1);    //右图
-    Mat image02 = imread("/home/wendao/Desktop/2.jpg", 1);    //左图
-    imshow("p2", image01);
-    imshow("p1", image02);
-    cout << "81" << endl;
-    waitKey(0);
+	ros::init(argc,argv,"image_mosaic_node");
+    Mat image01 = imread("/home/wuconglei/wendao/pp_ws/src/image_mosaic/image/1.jpg", 1);    //右图
+    Mat image02 = imread("/home/wuconglei/wendao/pp_ws/src/image_mosaic/image/2.jpg", 1);    //左图
+    
+    namedWindow("p1",WINDOW_NORMAL);
+    namedWindow("p2",WINDOW_NORMAL);
+   
+	imshow("p1", image01);
+	imshow("p2", image02);
 
     //灰度图转换  
     Mat image1, image2;
     cvtColor(image01, image1, CV_RGB2GRAY);
     cvtColor(image02, image2, CV_RGB2GRAY);
 
-
     //提取特征点    
     SurfFeatureDetector Detector(2000);  
     vector<KeyPoint> keyPoint1, keyPoint2;
+    
     Detector.detect(image1, keyPoint1);
+    while(ros::ok)
+		waitKey(100);
     Detector.detect(image2, keyPoint2);
 
     //特征点描述，为下边的特征点匹配做准备    
@@ -109,7 +115,8 @@ int main(int argc, char *argv[])
 
     matcher.knnMatch(imageDesc2, matchePoints, 2);
     cout << "total match points: " << matchePoints.size() << endl;
-
+	
+	
     // Lowe's algorithm,获取优秀匹配点
     for (int i = 0; i < matchePoints.size(); i++)
     {

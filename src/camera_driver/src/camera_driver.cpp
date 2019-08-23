@@ -6,8 +6,10 @@
 #include <cv_bridge/cv_bridge.h>
 #include "sensor_msgs/CameraInfo.h"
 #include "opencv2/imgproc/detail/distortion_model.hpp"
+#include<opencv2/opencv.hpp>
 #include<string>
 #include<algorithm>
+
 #define _NODE_NAME_ "camera_driver_node"
 
 using namespace cv;
@@ -25,9 +27,9 @@ public:
 		
 		image_transport::ImageTransport it(nh);
 	
-		std::string calibrationFilePath;
+		std::string calibrationFilePath = nh_private.param<std::string>("calibration_file_path","");
 		
-		if(!ros::param::get("~calibration_file_path",calibrationFilePath))
+		if(calibrationFilePath.empty())
 		{
 			ROS_ERROR("[%s]: please set calibration_file_path parameter",_NODE_NAME_);
 			return false;
@@ -101,16 +103,13 @@ public:
 				//imshow(std::to_string(i+1),rectified_images[i]);
 				
 			}
-				namedWindow("resultImage",WINDOW_NORMAL);
-				imshow("resultImage",resultImage);
-				waitKey(1);
+			cv::namedWindow("resultImage",cv::WINDOW_NORMAL);
+			cv::imshow("resultImage",resultImage);
+			cv::waitKey(1);
 			loop_rate.sleep();
 		}
 	}
 		
-		
-
-
 //cv::namedWindow("image_raw",cv::WINDOW_NORMAL); 
 //cv::imshow("image_raw",frame);
 //msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame).toImageMsg();
