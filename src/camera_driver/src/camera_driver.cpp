@@ -35,26 +35,33 @@ public:
 			return false;
 		}
 		
-		nh_private.param<bool>("is_show_image",m_is_show,false);
+		nh_private.param<bool>("is_show_result",m_isShowResult,false);
+		nh_private.param<bool>("is_show_alone_image",m_isShowAloneImage,false);
 		
 		nh_private.param<int>("frame_rate",m_frameRate,30);
 		
-		if(!ros::param::get("~cameras_id",m_camerasId))
+		if(!ros::param::get("~cameras_soft_id",m_camerasSoftId))
 		{
-			ROS_ERROR("[%s]: please set cameras_id parameter",_NODE_NAME_);
+			ROS_ERROR("[%s]: please set cameras_soft_id parameter",_NODE_NAME_);
+			return false;
+		}
+		if(!ros::param::get("~cameras_hard_id",m_camerasHardId))
+		{
+			ROS_ERROR("[%s]: please set cameras_hard_id parameter",_NODE_NAME_);
 			return false;
 		}
 		
-		m_distortCoefficients.resize(m_camerasId.size());
-		m_instrinsics.resize(m_camerasId.size());
-		m_newInstrinsics.resize(m_camerasId.size());
 		
-		for(int i=0; i<m_camerasId.size(); ++i)
+		m_distortCoefficients.resize(m_camerasSoftId.size());
+		m_instrinsics.resize(m_camerasSoftId.size());
+		m_newInstrinsics.resize(m_camerasSoftId.size());
+		
+		for(int i=0; i<m_camerasSoftId.size(); ++i)
 		{
-			std::string file_name = calibrationFilePath + std::to_string(i+1) + ".yaml";
+			std::string file_name = calibrationFilePath + std::to_string(m_camerasHardId[i]) + ".yaml";
 			if(!loadIntrinsics(file_name,m_instrinsics[i],m_distortCoefficients[i]))
 				return false;
-			//m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
+			m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
 		}
 		
 		m_pub = it.advertise("/image_rectified", 1);
@@ -69,12 +76,12 @@ public:
 	
 	void run()
 	{
-		std::vector<cv::VideoCapture> cameraHandles(m_camerasId.size());
-		for(int i=0; i<m_camerasId.size();++i)
+		std::vector<cv::VideoCapture> cameraHandles(m_camerasSoftId.size());
+		for(int i=0; i<m_camerasSoftId.size();++i)
 		{
-			if(!cameraHandles[i].open(m_camerasId[i]))
+			if(!cameraHandles[i].open(m_camerasSoftId[i]))
 			{
-				ROS_ERROR("[%s] open camera %d failed",_NODE_NAME_,m_camerasId[i]);
+				ROS_ERROR("[%s] open camera %d failed",_NODE_NAME_,m_camerasSoftId[i]);
 				return;
 			}
 			cameraHandles[i].set(CV_CAP_PROP_FPS,m_frameRate);
@@ -82,11 +89,16 @@ public:
 			cameraHandles[i].set(CV_CAP_PROP_FRAME_HEIGHT,m_imgSize.height);
 		}
 		ros::Rate loop_rate(m_frameRate);
-		std::vector<cv::Mat> raw_images(m_camerasId.size());
-		std::vector<cv::Mat> rectified_images(m_camerasId.size());
+		std::vector<cv::Mat> raw_images(m_camerasSoftId.size());
+		std::vector<cv::Mat> rectified_images(m_camerasSoftId.size());
 		sensor_msgs::Image::Ptr rosImage;
-		cv::Mat resultImage(m_imgSize.height,m_imgSize.width*m_camerasId.size(),CV_8UC3);
-	
+		cv::Mat resultImage(m_imgSize.height,m_imgSize.width*m_camerasSoftId.size(),CV_8UC3);
+		if(m_isShowResult)
+			cv::namedWindow("resultImage",cv::WINDOW_NORMAL);
+		if(m_isShowAloneImage)
+			for(auto id:m_camerasHardId)
+				cv::namedWindow(std::to_string(id),cv::WINDOW_NORMAL);
+		
 		while(ros::ok())
 		{
 			for(int i=0; i<cameraHandles.size(); ++i)
@@ -103,8 +115,12 @@ public:
 				//imshow(std::to_string(i+1),rectified_images[i]);
 				
 			}
-			cv::namedWindow("resultImage",cv::WINDOW_NORMAL);
-			cv::imshow("resultImage",resultImage);
+			if(m_isShowResult)
+				cv::imshow("resultImage",resultImage);
+			if(m_isShowAloneImage)
+				for(size_t i=0; i<m_camerasHardId.size(); ++i)
+					cv::imshow(std::to_string(m_camerasHardId[i]),rectified_images[i]);
+				
 			cv::waitKey(1);
 			loop_rate.sleep();
 		}
@@ -157,14 +173,16 @@ private:
 	image_transport::Publisher m_pub;
 	ros::Timer m_timer;
 	
-	std::vector<int> m_camerasId;
+	std::vector<int> m_camerasSoftId;
+	std::vector<int> m_camerasHardId;
 	std::vector<cv::Mat> m_newInstrinsics;
 	std::vector<cv::Mat> m_instrinsics;
 	std::vector<cv::Mat> m_distortCoefficients;
 	std::string m_distModel;
 	cv::Size m_imgSize;
 	int m_frameRate;
-	bool m_is_show;
+	bool m_isShowResult;
+	bool m_isShowAloneImage;
 	
 };
 

@@ -1,13 +1,16 @@
 <!-- -->
 
 <launch>
-<arg name="show" default="false" />
+	<arg name="show_result" default="true" />
+	<arg name="show_alone_image" default="true" />
 
 	<node pkg="camera_driver" type="camera_driver_node" name="camera_driver_node" output="screen">
 		<param name ="calibration_file_path" value="$(find camera_driver)/calibration_file/"/>
 		<param name ="frame_rate" value="30"/>
-		<param name="is_show_image" value="$(arg show)"/>
-		<rosparam param="cameras_id" >[1]</rosparam>
+		<param name="is_show_result" value="$(arg show_result)"/>
+		<param name="is_show_alone_image" value="$(arg show_alone_image)"/>
+		<rosparam param="cameras_soft_id" >[0,1,2]</rosparam>
+		<rosparam param="cameras_hard_id" >[2,1,4]</rosparam>
 		
 	</node>
 
