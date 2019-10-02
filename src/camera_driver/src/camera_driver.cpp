@@ -1,23 +1,27 @@
-#include <ros/ros.h>
-#include <image_transport/image_transport.h>
+
 #include <opencv2/highgui/highgui.hpp>
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/calib3d/calib3d.hpp"
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc/detail/distortion_model.hpp>
+
+#include <image_transport/image_transport.h>
+#include <sensor_msgs/CameraInfo.h>
 #include <cv_bridge/cv_bridge.h>
-#include "sensor_msgs/CameraInfo.h"
-#include <boost/thread.hpp>
-#include <boost/bind.hpp>
+
 #include <boost/thread/condition_variable.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/chrono.hpp>
-#include "opencv2/imgproc/detail/distortion_model.hpp"
-#include<opencv2/opencv.hpp>
-#include<string>
-#include<algorithm>
+#include <boost/thread.hpp>
+#include <boost/bind.hpp>
+
+#include <algorithm>
+#include <ros/ros.h>
+#include <string>
+
 
 #define _NODE_NAME_ "camera_driver_node"
 
-using namespace cv;
 using namespace std;
 
 class ImageTalker
@@ -60,6 +64,7 @@ public:
 		m_cameraHandles.resize(m_camerasSoftId.size());
 		m_imagePublisher.resize(m_camerasSoftId.size());
 		m_rawImages.resize(m_camerasSoftId.size());
+		m_distMap.resize(m_camerasSoftId.size());
 		m_rectifiedImages.resize(m_camerasSoftId.size());
 		m_imageGrapFlags = std::vector<bool>(m_camerasSoftId.size(),false);
 		m_mutexes.reset(new std::vector<boost::mutex>(m_camerasSoftId.size()));
@@ -72,6 +77,9 @@ public:
 			if(!loadIntrinsics(file_name,m_instrinsics[i],m_distortCoefficients[i]))
 				return false;
 			m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
+			cv::initUndistortRectifyMap(m_instrinsics[i], m_distortCoefficients[i], cv::Mat(),
+									m_newInstrinsics[i], m_imgSize, CV_16SC2, m_distMap[i].first, m_distMap[i].second);
+
 			if(!m_cameraHandles[i].open(m_camerasSoftId[i]))
 			{
 				ROS_ERROR("[%s] open camera %d failed",_NODE_NAME_,m_camerasSoftId[i]);
@@ -101,8 +109,10 @@ public:
 			locker.unlock();
 			
 			//cv::flip(src,dst,-1); //turn image
-			cv::undistort(m_rawImages[index], m_rectifiedImages[index], m_instrinsics[index],
-						 m_distortCoefficients[index],m_newInstrinsics[index]);
+			//cv::undistort(m_rawImages[index], m_rectifiedImages[index], m_instrinsics[index],
+			//			 m_distortCoefficients[index],m_newInstrinsics[index]);
+			
+			cv::remap(m_rawImages[index], m_rectifiedImages[index], m_distMap[index].first, m_distMap[index].second, cv::INTER_LINEAR);
 			sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", m_rectifiedImages[index]).toImageMsg();
 			imageMsg->header.frame_id = std::string("camera") + std::to_string(index);
 			m_imagePublisher[index].publish(imageMsg);
@@ -198,6 +208,7 @@ private:
 	std::vector<cv::Mat> m_distortCoefficients;
 	std::vector<cv::VideoCapture> m_cameraHandles;
 	std::vector<cv::Mat> m_rawImages;
+	std::vector<std::pair<cv::Mat,cv::Mat> > m_distMap;
 	std::vector<cv::Mat> m_rectifiedImages;
 	std::vector<bool> m_imageGrapFlags;
 	std::unique_ptr<std::vector<boost::mutex> > m_mutexes;
