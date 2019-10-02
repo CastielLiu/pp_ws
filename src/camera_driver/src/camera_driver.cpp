@@ -105,7 +105,6 @@ public:
 			
 			m_cameraHandles[index].retrieve(m_rawImages[index]);
 			m_imageGrapFlags[index] = false;
-			
 			locker.unlock();
 			
 			//cv::flip(src,dst,-1); //turn image
@@ -116,6 +115,7 @@ public:
 			sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", m_rectifiedImages[index]).toImageMsg();
 			imageMsg->header.frame_id = std::string("camera") + std::to_string(index);
 			m_imagePublisher[index].publish(imageMsg);
+			//cout << index << ": " << std::fixed << ros::Time::now().toSec() << endl;
 		}
 	}
 	
