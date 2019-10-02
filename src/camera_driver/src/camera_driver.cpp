@@ -7,8 +7,9 @@
 #include "sensor_msgs/CameraInfo.h"
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
-#include "boost/thread/condition_variable.hpp"
-#include "boost/thread/mutex.hpp"
+#include <boost/thread/condition_variable.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/chrono.hpp>
 #include "opencv2/imgproc/detail/distortion_model.hpp"
 #include<opencv2/opencv.hpp>
 #include<string>
@@ -108,12 +109,34 @@ public:
 		}
 	}
 	
+	void showImageThread()
+	{
+		boost::this_thread::sleep_for(boost::chrono::seconds(1));
+		
+		for(size_t i=0; i<m_camerasHardId.size(); ++i)
+			cv::namedWindow(std::string("image_rectified")+std::to_string(m_camerasHardId[i]), cv::WINDOW_NORMAL);
+	
+		while(ros::ok())
+		{
+			for(size_t i=0; i<m_camerasHardId.size(); ++i)
+			{
+				(*m_mutexes)[i].lock();
+				cv::imshow(std::string("image_rectified")+std::to_string(m_camerasHardId[i]), m_rectifiedImages[i]);
+				(*m_mutexes)[i].unlock();
+			}
+			cv::waitKey(50);
+		}
+		cv::destroyAllWindows();
+	}
+	
 	void run()
 	{
 		std::vector<boost::thread> _thread(m_camerasSoftId.size());
 		for(int i=0; i<m_camerasSoftId.size(); ++i)
 			_thread[i] = boost::thread(boost::bind(&ImageTalker::imageDistortThread,this,i));
-			
+		if(m_isShowAloneImage)
+			boost::thread t = boost::thread(boost::bind(&ImageTalker::showImageThread,this));
+		
 		ros::Rate loop_rate(m_frameRate);
 		while(ros::ok())
 		{
@@ -163,7 +186,6 @@ public:
 		fs.release();	//释放
 		return true;
 	}
-
 
 private:
 	bool m_is_rectify;
