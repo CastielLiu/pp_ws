@@ -5,6 +5,10 @@
 #include "opencv2/calib3d/calib3d.hpp"
 #include <cv_bridge/cv_bridge.h>
 #include "sensor_msgs/CameraInfo.h"
+#include <boost/thread.hpp>
+#include <boost/bind.hpp>
+#include "boost/thread/condition_variable.hpp"
+#include "boost/thread/mutex.hpp"
 #include "opencv2/imgproc/detail/distortion_model.hpp"
 #include<opencv2/opencv.hpp>
 #include<string>
@@ -25,8 +29,6 @@ public:
 	{
 		ros::NodeHandle nh,nh_private("~");
 		
-		image_transport::ImageTransport it(nh);
-	
 		std::string calibrationFilePath = nh_private.param<std::string>("calibration_file_path","");
 		
 		if(calibrationFilePath.empty())
@@ -51,10 +53,17 @@ public:
 			return false;
 		}
 		
-		
 		m_distortCoefficients.resize(m_camerasSoftId.size());
 		m_instrinsics.resize(m_camerasSoftId.size());
 		m_newInstrinsics.resize(m_camerasSoftId.size());
+		m_cameraHandles.resize(m_camerasSoftId.size());
+		m_imagePublisher.resize(m_camerasSoftId.size());
+		m_rawImages.resize(m_camerasSoftId.size());
+		m_rectifiedImages.resize(m_camerasSoftId.size());
+		m_imageGrapFlags = std::vector<bool>(m_camerasSoftId.size(),false);
+		m_mutexes.reset(new std::vector<boost::mutex>(m_camerasSoftId.size()));
+		m_conditionVars.reset(new std::vector<boost::condition_variable>(m_camerasSoftId.size()));
+		image_transport::ImageTransport it(nh);
 		
 		for(int i=0; i<m_camerasSoftId.size(); ++i)
 		{
@@ -62,75 +71,63 @@ public:
 			if(!loadIntrinsics(file_name,m_instrinsics[i],m_distortCoefficients[i]))
 				return false;
 			m_newInstrinsics[i] = getOptimalNewCameraMatrix(m_instrinsics[i],m_distortCoefficients[i],m_imgSize,1.0);
+			if(!m_cameraHandles[i].open(m_camerasSoftId[i]))
+			{
+				ROS_ERROR("[%s] open camera %d failed",_NODE_NAME_,m_camerasSoftId[i]);
+				return false;
+			}
+			m_cameraHandles[i].set(CV_CAP_PROP_FPS,m_frameRate);
+			m_cameraHandles[i].set(CV_CAP_PROP_FRAME_WIDTH,m_imgSize.width);
+			m_cameraHandles[i].set(CV_CAP_PROP_FRAME_HEIGHT,m_imgSize.height);
+			
+			std::string image_topic_name = std::string("/image_rectified") + std::to_string(m_camerasHardId[i]);
+			m_imagePublisher[i] = it.advertise(image_topic_name, 1);
 		}
-		
-		m_pub = it.advertise("/image_rectified", 1);
-		
-		//camera_info_pub_ = nh.advertise<sensor_msgs::CameraInfo>("/camera_info", 1);
-		//timer_ = nh.createTimer(ros::Duration(0.2), &ImageTalker::timerCallback, this);
 	}
 	
-	void timerCallback(const ros::TimerEvent& event)
+	void imageDistortThread(size_t index)
 	{
+		while(ros::ok())
+		{
+			boost::unique_lock<boost::mutex> locker((*m_mutexes)[index]);
+			
+			while(!m_imageGrapFlags[index])
+				(*m_conditionVars)[index].wait(locker);
+			
+			m_cameraHandles[index].retrieve(m_rawImages[index]);
+			m_imageGrapFlags[index] = false;
+			
+			locker.unlock();
+			
+			//cv::flip(src,dst,-1); //turn image
+			cv::undistort(m_rawImages[index], m_rectifiedImages[index], m_instrinsics[index],
+						 m_distortCoefficients[index],m_newInstrinsics[index]);
+			sensor_msgs::ImagePtr imageMsg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", m_rectifiedImages[index]).toImageMsg();
+			imageMsg->header.frame_id = std::string("camera") + std::to_string(index);
+			m_imagePublisher[index].publish(imageMsg);
+		}
 	}
 	
 	void run()
 	{
-		std::vector<cv::VideoCapture> cameraHandles(m_camerasSoftId.size());
-		for(int i=0; i<m_camerasSoftId.size();++i)
-		{
-			if(!cameraHandles[i].open(m_camerasSoftId[i]))
-			{
-				ROS_ERROR("[%s] open camera %d failed",_NODE_NAME_,m_camerasSoftId[i]);
-				return;
-			}
-			cameraHandles[i].set(CV_CAP_PROP_FPS,m_frameRate);
-			cameraHandles[i].set(CV_CAP_PROP_FRAME_WIDTH,m_imgSize.width);
-			cameraHandles[i].set(CV_CAP_PROP_FRAME_HEIGHT,m_imgSize.height);
-		}
+		std::vector<boost::thread> _thread(m_camerasSoftId.size());
+		for(int i=0; i<m_camerasSoftId.size(); ++i)
+			_thread[i] = boost::thread(boost::bind(&ImageTalker::imageDistortThread,this,i));
+			
 		ros::Rate loop_rate(m_frameRate);
-		std::vector<cv::Mat> raw_images(m_camerasSoftId.size());
-		std::vector<cv::Mat> rectified_images(m_camerasSoftId.size());
-		sensor_msgs::Image::Ptr rosImage;
-		cv::Mat resultImage(m_imgSize.height,m_imgSize.width*m_camerasSoftId.size(),CV_8UC3);
-		if(m_isShowResult)
-			cv::namedWindow("resultImage",cv::WINDOW_NORMAL);
-		if(m_isShowAloneImage)
-			for(auto id:m_camerasHardId)
-				cv::namedWindow(std::to_string(id),cv::WINDOW_NORMAL);
-		
 		while(ros::ok())
 		{
-			for(int i=0; i<cameraHandles.size(); ++i)
-				cameraHandles[i].grab();
-			for(int i=0; i<cameraHandles.size(); ++i)
+			for(int i=0; i<m_cameraHandles.size(); ++i)
 			{
-				cameraHandles[i].retrieve(raw_images[i]);
-				//cv::flip(src,dst,-1); //turn image
-				cv::undistort(raw_images[i], rectified_images[i], m_instrinsics[i],
-							 m_distortCoefficients[i],m_newInstrinsics[i]);
-				rectified_images[i].copyTo(resultImage(
-					Rect(rectified_images[i].cols*(cameraHandles.size()-1-i),0,m_imgSize.width,m_imgSize.height)));
-					
-				//imshow(std::to_string(i+1),rectified_images[i]);
-				
+				boost::unique_lock<boost::mutex> locker((*m_mutexes)[i]);
+				m_cameraHandles[i].grab();
+				m_imageGrapFlags[i] = true;
+				(*m_conditionVars)[i].notify_one();
 			}
-			if(m_isShowResult)
-				cv::imshow("resultImage",resultImage);
-			if(m_isShowAloneImage)
-				for(size_t i=0; i<m_camerasHardId.size(); ++i)
-					cv::imshow(std::to_string(m_camerasHardId[i]),rectified_images[i]);
-				
-			cv::waitKey(1);
+			
 			loop_rate.sleep();
 		}
 	}
-		
-//cv::namedWindow("image_raw",cv::WINDOW_NORMAL); 
-//cv::imshow("image_raw",frame);
-//msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame).toImageMsg();
-//msg->header.frame_id="camera";
-//pub_.publish(msg);
 
 	
 	bool loadIntrinsics(const std::string &calibration_file,
@@ -170,14 +167,20 @@ public:
 
 private:
 	bool m_is_rectify;
-	image_transport::Publisher m_pub;
 	ros::Timer m_timer;
-	
+	std::vector<image_transport::Publisher> m_imagePublisher;
 	std::vector<int> m_camerasSoftId;
 	std::vector<int> m_camerasHardId;
 	std::vector<cv::Mat> m_newInstrinsics;
 	std::vector<cv::Mat> m_instrinsics;
 	std::vector<cv::Mat> m_distortCoefficients;
+	std::vector<cv::VideoCapture> m_cameraHandles;
+	std::vector<cv::Mat> m_rawImages;
+	std::vector<cv::Mat> m_rectifiedImages;
+	std::vector<bool> m_imageGrapFlags;
+	std::unique_ptr<std::vector<boost::mutex> > m_mutexes;
+	std::unique_ptr<std::vector<boost::condition_variable> > m_conditionVars;
+	
 	std::string m_distModel;
 	cv::Size m_imgSize;
 	int m_frameRate;
