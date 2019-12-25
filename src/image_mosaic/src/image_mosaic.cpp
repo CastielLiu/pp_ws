@@ -75,7 +75,6 @@ void CalcCorners(const Mat& H, const Mat& src)
 
 int main(int argc, char *argv[])
 {
-<<<<<<< HEAD
 	ros::init(argc,argv,"image_mosaic_node");
     Mat image01 = imread("/home/wuconglei/wendao/pp_ws/src/image_mosaic/image/1.jpg", 1);    //右图
     Mat image02 = imread("/home/wuconglei/wendao/pp_ws/src/image_mosaic/image/2.jpg", 1);    //左图
@@ -85,10 +84,6 @@ int main(int argc, char *argv[])
    
 	imshow("p1", image01);
 	imshow("p2", image02);
-=======
-    Mat image01 = imread("/home/wendao/Desktop/5.jpg", 1);    //右图
-    Mat image02 = imread("/home/wendao/Desktop/6.jpg", 1);    //左图
->>>>>>> dade03598eb51a7a9b4c1a7e5c36d1752f352225
 
     //灰度图转换  
     Mat image1, image2;
@@ -99,17 +94,9 @@ int main(int argc, char *argv[])
     auto detector = AKAZE::create(2000);
     //SurfFeatureDetector Detector(2000);  
     vector<KeyPoint> keyPoint1, keyPoint2;
-<<<<<<< HEAD
     
-    Detector.detect(image1, keyPoint1);
-    while(ros::ok)
-		waitKey(100);
-    Detector.detect(image2, keyPoint2);
-=======
     detector->detect(image1, keyPoint1);
     detector->detect(image2, keyPoint2);
->>>>>>> dade03598eb51a7a9b4c1a7e5c36d1752f352225
-
 	
     //特征点描述，为下边的特征点匹配做准备    
     SurfDescriptorExtractor Descriptor;
@@ -151,8 +138,6 @@ int main(int argc, char *argv[])
         imagePoints1.push_back(keyPoint1[GoodMatchePoints[i].trainIdx].pt);
     }
 
-
-
     //获取图像1到图像2的投影映射矩阵 尺寸为3*3  
     Mat homo = findHomography(imagePoints1, imagePoints2, CV_RANSAC);
     ////也可以使用getPerspectiveTransform方法获得透视变换矩阵，不过要求只能有4个点，效果稍差  
@@ -188,7 +173,6 @@ int main(int argc, char *argv[])
 
 
     OptimizeSeam(image02, imageTransform1, dst);
-
 
     imshow("dst", dst);
     imwrite("dst.jpg", dst);
