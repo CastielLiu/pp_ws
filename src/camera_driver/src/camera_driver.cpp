@@ -132,6 +132,7 @@ public:
 			{
 				(*m_mutexes)[i].lock();
 				cv::imshow(std::string("image_rectified")+std::to_string(m_camerasHardId[i]), m_rectifiedImages[i]);
+
 				(*m_mutexes)[i].unlock();
 			}
 			cv::waitKey(50);
